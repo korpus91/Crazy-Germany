@@ -37,8 +37,167 @@ const BureaucracyHellGame = () => {
   const [achievements, setAchievements] = useState([]);
   const [actionBars, setActionBars] = useState([]);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   // Enhanced Visual Effects System
+  const createParticleExplosion = useCallback((x, y, type = 'success', count = 10) => {
+    const newParticles = [];
+    for (let i = 0; i < count; i++) {
+      newParticles.push({
+        id: Date.now() + i,
+        x: x + (Math.random() - 0.5) * 100,
+        y: y + (Math.random() - 0.5) * 100,
+        vx: (Math.random() - 0.5) * 10,
+        vy: (Math.random() - 0.5) * 10 - 5,
+        size: Math.random() * 8 + 4,
+        type,
+        life: 1,
+        decay: 0.02 + Math.random() * 0.02
+      });
+    }
+    setParticles(prev => [...prev, ...newParticles]);
+  }, []);
+
+  const createExplosion = useCallback((x, y, type = 'impact') => {
+    const explosion = {
+      id: Date.now(),
+      x,
+      y,
+      type,
+      scale: 0,
+      opacity: 1,
+      duration: 600
+    };
+    setExplosions(prev => [...prev, explosion]);
+    
+    setTimeout(() => {
+      setExplosions(prev => prev.filter(e => e.id !== explosion.id));
+    }, explosion.duration);
+  }, []);
+
+  const triggerScreenShake = useCallback((duration = 500) => {
+    setScreenShake(true);
+    setTimeout(() => setScreenShake(false), duration);
+  }, []);
+
+  const triggerScreenFlash = useCallback((color = 'bg-white', duration = 200) => {
+    setScreenFlash(color);
+    setTimeout(() => setScreenFlash(false), duration);
+  }, []);
+
+  const addFloatingDocument = useCallback((type, message) => {
+    const doc = {
+      id: Date.now(),
+      type,
+      message,
+      x: Math.random() * 80 + 10,
+      y: 100,
+      vy: -2,
+      life: 3000
+    };
+    setFloatingDocuments(prev => [...prev, doc]);
+    
+    setTimeout(() => {
+      setFloatingDocuments(prev => prev.filter(d => d.id !== doc.id));
+    }, doc.life);
+  }, []);
+
+  const showAchievement = useCallback((title, description, icon) => {
+    const achievement = {
+      id: Date.now(),
+      title,
+      description,
+      icon,
+      opacity: 0,
+      scale: 0.8
+    };
+    setAchievements(prev => [...prev, achievement]);
+    
+    // Animate in
+    setTimeout(() => {
+      setAchievements(prev => prev.map(a => 
+        a.id === achievement.id ? { ...a, opacity: 1, scale: 1 } : a
+      ));
+    }, 50);
+    
+    // Remove after delay
+    setTimeout(() => {
+      setAchievements(prev => prev.filter(a => a.id !== achievement.id));
+    }, 4000);
+  }, []);
+
+  const createActionBar = useCallback((message, duration = 2000) => {
+    const bar = {
+      id: Date.now(),
+      message,
+      progress: 0,
+      duration
+    };
+    setActionBars(prev => [...prev, bar]);
+    
+    const interval = setInterval(() => {
+      setActionBars(prev => prev.map(b => {
+        if (b.id === bar.id) {
+          const newProgress = b.progress + (100 / (duration / 50));
+          if (newProgress >= 100) {
+            clearInterval(interval);
+            setTimeout(() => {
+              setActionBars(prev => prev.filter(ab => ab.id !== bar.id));
+            }, 500);
+            return { ...b, progress: 100 };
+          }
+          return { ...b, progress: newProgress };
+        }
+        return b;
+      }));
+    }, 50);
+  }, []);
+
+  // Keyboard navigation support
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (miniGameActive || showCommentary) return;
+      
+      // Number keys 1-4 for quick answer selection
+      const num = parseInt(e.key);
+      if (num >= 1 && num <= 4 && currentQuestion?.options?.[num - 1]) {
+        const option = currentQuestion.options[num - 1];
+        handleAnswer(currentQuestion.id, option.value, option);
+        showAchievement('Keyboard Ninja!', `Used shortcut key ${num}`, '⌨️');
+      }
+      
+      // Escape to close overlays
+      if (e.key === 'Escape') {
+        if (showCommentary) {
+          setShowCommentary(false);
+        } else if (showHelp) {
+          setShowHelp(false);
+        }
+      }
+      
+      // F1 or ? to show help
+      if (e.key === 'F1' || e.key === '?') {
+        e.preventDefault();
+        setShowHelp(!showHelp);
+      }
+      
+      // Space for easter eggs
+      if (e.key === ' ' && e.ctrlKey) {
+        createParticleExplosion(
+          Math.random() * window.innerWidth,
+          Math.random() * window.innerHeight,
+          'hover',
+          25
+        );
+        showAchievement('Secret Combo!', 'Ctrl+Space activated!', '🚀');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [miniGameActive, showCommentary, currentQuestion, handleAnswer]);
+
+  // Particle animation loop
   const createParticleExplosion = useCallback((x, y, type = 'success', count = 10) => {
     const newParticles = [];
     for (let i = 0; i < count; i++) {
@@ -457,7 +616,7 @@ const BureaucracyHellGame = () => {
       const newClicks = clicks + clickPower;
       setClicks(newClicks);
       
-      // Visual click effect
+      // Enhanced visual click effect
       const rect = e.currentTarget.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
@@ -468,18 +627,47 @@ const BureaucracyHellGame = () => {
         setClickEffects(prev => prev.filter(effect => effect.id !== id));
       }, 1000);
 
+      // Create particles at click location
+      createParticleExplosion(x, y, 'success', clickPower * 2);
+      
       // Screen shake on power clicks
       if (clickPower > 1) {
         e.currentTarget.style.animation = 'shake 0.2s';
+        triggerScreenShake(100);
         setTimeout(() => {
           e.currentTarget.style.animation = '';
         }, 200);
+      }
+      
+      // Milestone effects
+      if (newClicks >= targetClicks * 0.5 && clicks < targetClicks * 0.5) {
+        showAchievement('Halfway There!', 'Keep clicking like a maniac!', '🔥');
+      }
+      if (newClicks >= targetClicks * 0.8 && clicks < targetClicks * 0.8) {
+        showAchievement('Almost There!', 'The appointment is within reach!', '⚡');
       }
     };
 
     const endGame = () => {
       setGameActive(false);
       const success = clicks >= targetClicks;
+      
+      // Epic finale effects
+      if (success) {
+        createExplosion(50, 50, 'success');
+        triggerScreenFlash('bg-green-500', 400);
+        showAchievement('Appointment Secured!', 'You out-clicked the competition!', '🏆');
+        
+        // Rapid-fire particle celebration
+        setTimeout(() => createParticleExplosion(25, 25, 'success', 15), 100);
+        setTimeout(() => createParticleExplosion(75, 25, 'success', 15), 200);
+        setTimeout(() => createParticleExplosion(50, 75, 'success', 15), 300);
+      } else {
+        triggerScreenShake(800);
+        createExplosion(50, 50, 'failure');
+        triggerScreenFlash('bg-red-500', 300);
+        showAchievement('Appointment Lost!', 'German efficiency defeats you again', '💔');
+      }
       
       onComplete({
         success,
@@ -667,6 +855,13 @@ const BureaucracyHellGame = () => {
     const submitAnswer = () => {
       if (userInput.toUpperCase() === currentPuzzle.answer) {
         setSolved(true);
+        
+        // Success effects
+        createExplosion(50, 40, 'success');
+        triggerScreenFlash('bg-purple-500', 400);
+        showAchievement('Logic Mastered!', 'You outsmarted the bureaucracy!', '🧠');
+        createParticleExplosion(50, 40, 'success', 20);
+        
         setTimeout(() => {
           onComplete({
             success: true,
@@ -679,8 +874,15 @@ const BureaucracyHellGame = () => {
           });
         }, 2000);
       } else {
+        // Wrong answer effects
+        triggerScreenShake(300);
+        createParticleExplosion(50, 40, 'failure', 5);
+        
         setAttempts(prev => prev - 1);
         if (attempts <= 1) {
+          triggerScreenFlash('bg-red-500', 500);
+          showAchievement('Logic Failed!', 'The bureaucracy wins again...', '💔');
+          
           onComplete({
             success: false,
             message: `The answer was "${currentPuzzle.answer}". ${currentPuzzle.explanation}`,
@@ -690,6 +892,8 @@ const BureaucracyHellGame = () => {
               shock: 15
             }
           });
+        } else {
+          showAchievement('Try Again!', `${attempts - 1} attempts remaining`, '⚠️');
         }
       }
     };
@@ -697,6 +901,8 @@ const BureaucracyHellGame = () => {
     const getHint = () => {
       if (hints.length < currentPuzzle.hints.length) {
         setHints([...hints, currentPuzzle.hints[hints.length]]);
+        createActionBar(`Hint revealed: ${currentPuzzle.hints[hints.length]}`, 3000);
+        createParticleExplosion(75, 25, 'hover', 8);
       }
     };
 
@@ -809,6 +1015,7 @@ const BureaucracyHellGame = () => {
         effect: () => {
           setTimeElapsed(t => t + 30);
           setOfficeOpen(false);
+          showAchievement('Coffee Break!', 'German priorities in action', '☕');
           setTimeout(() => setOfficeOpen(true), 3000);
         }
       },
@@ -819,6 +1026,8 @@ const BureaucracyHellGame = () => {
         effect: () => {
           setPosition(p => Math.max(1, p - 10));
           setPlayerAnimation('jump');
+          createParticleExplosion(50, 50, 'success', 15);
+          showAchievement('Express Lane!', 'Lightning speed bureaucracy!', '⚡');
           setTimeout(() => setPlayerAnimation(''), 500);
         }
       },
@@ -829,6 +1038,10 @@ const BureaucracyHellGame = () => {
         effect: () => {
           setTimeElapsed(t => t + 60);
           setQueuePeople(prev => prev.map(p => ({ ...p, angry: true })));
+          triggerScreenShake(500);
+          triggerScreenFlash('bg-red-500', 200);
+          createExplosion(50, 50, 'failure');
+          showAchievement('System Down!', 'Technology vs bureaucracy', '💥');
           setTimeout(() => setQueuePeople(prev => prev.map(p => ({ ...p, angry: false }))), 2000);
         }
       }
@@ -897,6 +1110,36 @@ const BureaucracyHellGame = () => {
       setGameActive(false);
       const hours = Math.floor(timeElapsed / 60);
       const minutes = timeElapsed % 60;
+      
+      // Epic finale effects
+      if (reached && hours < 4) {
+        // Success - reached counter quickly
+        createExplosion(50, 50, 'success');
+        triggerScreenFlash('bg-green-500', 500);
+        showAchievement('Queue Conquered!', 'Impossible feat achieved!', '👑');
+        
+        // Celebration particles
+        for (let i = 0; i < 5; i++) {
+          setTimeout(() => {
+            createParticleExplosion(
+              Math.random() * 100, 
+              Math.random() * 100, 
+              'success', 
+              10
+            );
+          }, i * 200);
+        }
+      } else if (reached) {
+        // Success but took too long
+        showAchievement('Finally!', 'You survived the queue torture', '😵‍💫');
+        createExplosion(50, 50, 'impact');
+      } else {
+        // Failure - office closed
+        triggerScreenShake(1000);
+        triggerScreenFlash('bg-red-500', 300);
+        createExplosion(50, 50, 'failure');
+        showAchievement('Queue Defeated!', 'The system wins again', '💀');
+      }
       
       onComplete({
         success: reached && hours < 4,
@@ -1509,6 +1752,18 @@ const BureaucracyHellGame = () => {
         </div>
         {/* Progress and meters */}
         <div className="mb-6 space-y-2 relative z-10">
+          {/* Help button */}
+          <div className="absolute -top-2 right-0">
+            <button
+              onClick={() => setShowHelp(!showHelp)}
+              className="bg-gray-700/80 hover:bg-gray-600/80 text-white p-2 rounded-full transition-all hover:scale-110"
+              aria-label="Show help and keyboard shortcuts"
+              title="Help & Shortcuts (F1 or ?)"
+            >
+              <Brain className="w-4 h-4" />
+            </button>
+          </div>
+          
           <div className="bg-gray-800 rounded-full h-6 overflow-hidden border border-gray-600 relative shadow-lg">
             <div 
               className="bg-gradient-to-r from-red-600 via-orange-500 to-yellow-500 h-full transition-all duration-700 ease-out"
@@ -1596,13 +1851,157 @@ const BureaucracyHellGame = () => {
         {/* Commentary overlay */}
         {showCommentary && !miniGameActive && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-            <div className="bg-gradient-to-br from-red-950 to-black p-8 rounded-3xl max-w-lg border-4 border-yellow-500 shadow-2xl animate-bounce-subtle">
-              <div className="text-4xl mb-4 text-center">
-                {shockMeter > 70 ? '🤯' : frustrationMeter > 70 ? '🤬' : '😱'}
+            <div 
+              className="bg-gradient-to-br from-red-950 to-black p-8 rounded-3xl max-w-lg border-4 border-yellow-500 shadow-2xl animate-bounce-subtle relative overflow-hidden"
+              onClick={() => {
+                // Easter egg: click on commentary for bonus particles
+                createParticleExplosion(50, 50, 'hover', 20);
+                if (Math.random() > 0.9) {
+                  showAchievement('Easter Egg!', 'You found the secret click!', '🥚');
+                }
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              {/* Animated background pattern */}
+              <div className="absolute inset-0 opacity-10">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="absolute w-8 h-8 border border-yellow-500 rotate-45"
+                    style={{
+                      left: `${20 + i * 15}%`,
+                      top: `${10 + Math.sin(Date.now() / 1000 + i) * 30}%`,
+                      animation: `float ${2 + i * 0.3}s ease-in-out infinite ${i * 0.1}s`
+                    }}
+                  />
+                ))}
               </div>
-              <p className="text-yellow-300 font-bold text-xl text-center leading-relaxed">
-                {currentCommentary}
-              </p>
+              
+              <div className="relative z-10">
+                <div className="text-4xl mb-4 text-center">
+                  {shockMeter > 80 ? '🤯' : 
+                   frustrationMeter > 80 ? '🤬' : 
+                   kafkaScore > 70 ? '🤔' : 
+                   survivalPoints < 30 ? '😵' : '😱'}
+                </div>
+                <p className="text-yellow-300 font-bold text-xl text-center leading-relaxed mb-4">
+                  {currentCommentary}
+                </p>
+                
+                {/* Dynamic meter display in commentary */}
+                <div className="flex justify-center gap-4 text-sm">
+                  {shockMeter > 50 && (
+                    <span className="bg-red-600/30 px-2 py-1 rounded text-red-200">
+                      ⚡ Shock: {shockMeter}%
+                    </span>
+                  )}
+                  {frustrationMeter > 50 && (
+                    <span className="bg-orange-600/30 px-2 py-1 rounded text-orange-200">
+                      😤 Rage: {frustrationMeter}%
+                    </span>
+                  )}
+                  {kafkaScore > 50 && (
+                    <span className="bg-purple-600/30 px-2 py-1 rounded text-purple-200">
+                      🌀 Kafka: {kafkaScore}%
+                    </span>
+                  )}
+                </div>
+                
+                <div className="text-center mt-4 text-xs text-gray-400">
+                  💡 Click for surprise!
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Help overlay */}
+        {showHelp && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md">
+            <div className="bg-gradient-to-br from-gray-900 to-black p-8 rounded-3xl max-w-2xl w-full border-4 border-blue-500 shadow-2xl relative">
+              <button
+                onClick={() => setShowHelp(false)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+                aria-label="Close help"
+              >
+                ✕
+              </button>
+              
+              <div className="text-center mb-6">
+                <div className="text-4xl mb-2">🤓</div>
+                <h2 className="text-2xl font-black text-blue-400 mb-2">
+                  Survival Guide for German Bureaucracy Hell
+                </h2>
+                <p className="text-gray-300">
+                  Because even suffering needs instructions
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="text-lg font-bold text-yellow-400 mb-3 flex items-center gap-2">
+                    ⌨️ Keyboard Shortcuts
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-300">Number keys 1-4:</span>
+                      <span className="text-blue-300">Quick answer selection</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-300">F1 or ?:</span>
+                      <span className="text-blue-300">Show/hide this help</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-300">Escape:</span>
+                      <span className="text-blue-300">Close overlays</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-300">Ctrl + Space:</span>
+                      <span className="text-blue-300">Secret particle effect</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-bold text-yellow-400 mb-3 flex items-center gap-2">
+                    🎯 Game Mechanics
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div><span className="text-red-400">Shock:</span> <span className="text-gray-300">Reality-breaking moments</span></div>
+                    <div><span className="text-orange-400">Rage:</span> <span className="text-gray-300">Frustration buildup</span></div>
+                    <div><span className="text-purple-400">Kafka:</span> <span className="text-gray-300">Surreal bureaucracy level</span></div>
+                    <div><span className="text-green-400">Will:</span> <span className="text-gray-300">Survival instinct remaining</span></div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-bold text-yellow-400 mb-3 flex items-center gap-2">
+                    🎮 Interactive Elements
+                  </h3>
+                  <div className="space-y-2 text-sm text-gray-300">
+                    <div>• Click commentary boxes for Easter eggs</div>
+                    <div>• Hover over options for particle effects</div>
+                    <div>• Mini-games have hidden achievements</div>
+                    <div>• Watch for visual risk indicators</div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-bold text-yellow-400 mb-3 flex items-center gap-2">
+                    💡 Pro Tips
+                  </h3>
+                  <div className="space-y-2 text-sm text-gray-300">
+                    <div>• High-risk choices = better story outcomes</div>
+                    <div>• Achievements unlock for special actions</div>
+                    <div>• Screen effects indicate game state</div>
+                    <div>• Every choice affects your final result</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center mt-6 text-xs text-gray-500">
+                May the Forms be with you. 📋✨
+              </div>
             </div>
           </div>
         )}
@@ -1650,7 +2049,7 @@ const BureaucracyHellGame = () => {
                   </div>
                 </div>
 
-                <div className="grid gap-3 max-h-[400px] overflow-y-auto pr-2">
+                <div className="grid gap-3 max-h-[400px] overflow-y-auto pr-2" role="radiogroup" aria-label="Bureaucracy question options">
                   {currentQuestion.options.map((option, index) => (
                     <button
                       key={option.value}
@@ -1673,33 +2072,44 @@ const BureaucracyHellGame = () => {
                         animationDelay: `${index * 100}ms`,
                         animation: !isTransitioning ? `slideInFromLeft 0.5s ease-out ${index * 100}ms both` : 'none'
                       }}
+                      role="radio"
+                      aria-checked="false"
+                      aria-label={`Option ${index + 1}: ${option.label}. ${option.desc}. Press ${index + 1} for quick selection.`}
+                      aria-describedby={`option-${index}-risks`}
+                      tabIndex={0}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                          <span className="text-4xl transform group-hover:scale-125 group-hover:rotate-12 transition-all duration-300 filter group-hover:drop-shadow-lg">
+                          <span 
+                            className="text-4xl transform group-hover:scale-125 group-hover:rotate-12 transition-all duration-300 filter group-hover:drop-shadow-lg"
+                            aria-hidden="true"
+                          >
                             {option.emoji}
                           </span>
                           <div>
                             <div className="font-bold text-lg text-yellow-200 group-hover:text-yellow-100 transition-colors">
+                              <span className="text-gray-400 text-sm mr-2" aria-label={`Shortcut key ${index + 1}`}>
+                                {index + 1}.
+                              </span>
                               {option.label}
                             </div>
                             <div className="text-sm text-gray-400 mt-1 group-hover:text-gray-300 transition-colors">
                               {option.desc}
                             </div>
                             {/* Risk indicators */}
-                            <div className="flex gap-2 mt-2">
+                            <div className="flex gap-2 mt-2" id={`option-${index}-risks`}>
                               {option.shock >= 20 && (
-                                <span className="text-xs bg-red-600/50 text-red-200 px-2 py-1 rounded-full">
+                                <span className="text-xs bg-red-600/50 text-red-200 px-2 py-1 rounded-full" aria-label="High shock risk">
                                   ⚡ High Shock
                                 </span>
                               )}
                               {option.frustration >= 15 && (
-                                <span className="text-xs bg-orange-600/50 text-orange-200 px-2 py-1 rounded-full">
+                                <span className="text-xs bg-orange-600/50 text-orange-200 px-2 py-1 rounded-full" aria-label="Causes frustration">
                                   😤 Frustration
                                 </span>
                               )}
                               {option.kafka >= 10 && (
-                                <span className="text-xs bg-purple-600/50 text-purple-200 px-2 py-1 rounded-full">
+                                <span className="text-xs bg-purple-600/50 text-purple-200 px-2 py-1 rounded-full" aria-label="Increases Kafkaesque meter">
                                   🌀 Kafkaesque
                                 </span>
                               )}
@@ -1707,7 +2117,7 @@ const BureaucracyHellGame = () => {
                           </div>
                         </div>
                         <div className="flex flex-col items-center">
-                          <ChevronRight className="w-6 h-6 text-gray-500 group-hover:text-yellow-400 group-hover:translate-x-1 transition-all duration-300" />
+                          <ChevronRight className="w-6 h-6 text-gray-500 group-hover:text-yellow-400 group-hover:translate-x-1 transition-all duration-300" aria-hidden="true" />
                           {(option.shock || option.frustration || option.kafka) && (
                             <div className="text-xs text-gray-500 mt-1 group-hover:text-yellow-500">
                               Click for chaos
