@@ -28,6 +28,155 @@ const BureaucracyHellGame = () => {
   const [documentsCollected, setDocumentsCollected] = useState([]);
   const [formsRejected, setFormsRejected] = useState(0);
 
+  // Enhanced Visual Effects State
+  const [particles, setParticles] = useState([]);
+  const [explosions, setExplosions] = useState([]);
+  const [screenShake, setScreenShake] = useState(false);
+  const [screenFlash, setScreenFlash] = useState(false);
+  const [floatingDocuments, setFloatingDocuments] = useState([]);
+  const [achievements, setAchievements] = useState([]);
+  const [actionBars, setActionBars] = useState([]);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  // Enhanced Visual Effects System
+  const createParticleExplosion = useCallback((x, y, type = 'success', count = 10) => {
+    const newParticles = [];
+    for (let i = 0; i < count; i++) {
+      newParticles.push({
+        id: Date.now() + i,
+        x: x + (Math.random() - 0.5) * 100,
+        y: y + (Math.random() - 0.5) * 100,
+        vx: (Math.random() - 0.5) * 10,
+        vy: (Math.random() - 0.5) * 10 - 5,
+        size: Math.random() * 8 + 4,
+        type,
+        life: 1,
+        decay: 0.02 + Math.random() * 0.02
+      });
+    }
+    setParticles(prev => [...prev, ...newParticles]);
+  }, []);
+
+  const createExplosion = useCallback((x, y, type = 'impact') => {
+    const explosion = {
+      id: Date.now(),
+      x,
+      y,
+      type,
+      scale: 0,
+      opacity: 1,
+      duration: 600
+    };
+    setExplosions(prev => [...prev, explosion]);
+    
+    setTimeout(() => {
+      setExplosions(prev => prev.filter(e => e.id !== explosion.id));
+    }, explosion.duration);
+  }, []);
+
+  const triggerScreenShake = useCallback((duration = 500) => {
+    setScreenShake(true);
+    setTimeout(() => setScreenShake(false), duration);
+  }, []);
+
+  const triggerScreenFlash = useCallback((color = 'bg-white', duration = 200) => {
+    setScreenFlash(color);
+    setTimeout(() => setScreenFlash(false), duration);
+  }, []);
+
+  const addFloatingDocument = useCallback((type, message) => {
+    const doc = {
+      id: Date.now(),
+      type,
+      message,
+      x: Math.random() * 80 + 10,
+      y: 100,
+      vy: -2,
+      life: 3000
+    };
+    setFloatingDocuments(prev => [...prev, doc]);
+    
+    setTimeout(() => {
+      setFloatingDocuments(prev => prev.filter(d => d.id !== doc.id));
+    }, doc.life);
+  }, []);
+
+  const showAchievement = useCallback((title, description, icon) => {
+    const achievement = {
+      id: Date.now(),
+      title,
+      description,
+      icon,
+      opacity: 0,
+      scale: 0.8
+    };
+    setAchievements(prev => [...prev, achievement]);
+    
+    // Animate in
+    setTimeout(() => {
+      setAchievements(prev => prev.map(a => 
+        a.id === achievement.id ? { ...a, opacity: 1, scale: 1 } : a
+      ));
+    }, 50);
+    
+    // Remove after delay
+    setTimeout(() => {
+      setAchievements(prev => prev.filter(a => a.id !== achievement.id));
+    }, 4000);
+  }, []);
+
+  const createActionBar = useCallback((message, duration = 2000) => {
+    const bar = {
+      id: Date.now(),
+      message,
+      progress: 0,
+      duration
+    };
+    setActionBars(prev => [...prev, bar]);
+    
+    const interval = setInterval(() => {
+      setActionBars(prev => prev.map(b => {
+        if (b.id === bar.id) {
+          const newProgress = b.progress + (100 / (duration / 50));
+          if (newProgress >= 100) {
+            clearInterval(interval);
+            setTimeout(() => {
+              setActionBars(prev => prev.filter(ab => ab.id !== bar.id));
+            }, 500);
+            return { ...b, progress: 100 };
+          }
+          return { ...b, progress: newProgress };
+        }
+        return b;
+      }));
+    }, 50);
+  }, []);
+
+  // Particle animation loop
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setParticles(prev => {
+        return prev.map(particle => ({
+          ...particle,
+          x: particle.x + particle.vx,
+          y: particle.y + particle.vy,
+          vy: particle.vy + 0.3, // gravity
+          life: particle.life - particle.decay
+        })).filter(particle => particle.life > 0);
+      });
+
+      setFloatingDocuments(prev => {
+        return prev.map(doc => ({
+          ...doc,
+          y: doc.y + doc.vy,
+          x: doc.x + Math.sin(Date.now() / 1000 + doc.id) * 0.5
+        })).filter(doc => doc.y > -50);
+      });
+    }, 16); // ~60fps
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Interactive Mini-Game Components
   const DocumentCollectionGame = ({ onComplete }) => {
     const [timeLeft, setTimeLeft] = useState(30);
@@ -105,15 +254,33 @@ const BureaucracyHellGame = () => {
         setCollected(prev => [...prev, doc.name]);
         setFallingDocs(prev => prev.filter(d => d.id !== docId));
         
-        // Visual feedback
+        // Enhanced visual feedback with particles
+        const docElement = gameAreaRef.current?.querySelector(`[data-doc-id="${docId}"]`);
+        if (docElement) {
+          const rect = docElement.getBoundingClientRect();
+          const gameRect = gameAreaRef.current.getBoundingClientRect();
+          const x = rect.left - gameRect.left + rect.width / 2;
+          const y = rect.top - gameRect.top + rect.height / 2;
+          
+          // Create particle explosion
+          createParticleExplosion(x, y, 'document', 8);
+        }
+        
+        // Original visual feedback (enhanced)
         const effect = document.createElement('div');
-        effect.innerHTML = `<div style="color: #facc15; font-weight: bold; font-size: 24px; animation: popEffect 1s ease-out forwards;">+${doc.points}</div>`;
+        effect.innerHTML = `<div style="color: #facc15; font-weight: bold; font-size: 24px; animation: popEffect 1s ease-out forwards; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">+${doc.points}</div>`;
         effect.style.position = 'absolute';
         effect.style.left = doc.x + '%';
         effect.style.top = doc.y + '%';
         effect.style.pointerEvents = 'none';
+        effect.style.zIndex = '1000';
         gameAreaRef.current?.appendChild(effect);
         setTimeout(() => effect.remove(), 1000);
+        
+        // Show achievement for special documents
+        if (doc.points >= 30) {
+          showAchievement(`Critical Document!`, `Collected ${doc.name}`, doc.emoji);
+        }
       }
     };
 
@@ -122,6 +289,19 @@ const BureaucracyHellGame = () => {
       const success = score >= 150;
       const requiredDocs = ['Passport', 'Anmeldung', 'Work Contract'];
       const hasRequired = requiredDocs.every(doc => collected.includes(doc));
+      
+      // Epic visual finale
+      if (success && hasRequired) {
+        // Success explosion
+        createExplosion(50, 50, 'success');
+        triggerScreenFlash('bg-green-500', 300);
+        showAchievement('Mission Complete!', 'Bureaucracy conquered!', '🏆');
+      } else {
+        // Failure effects
+        triggerScreenShake(800);
+        triggerScreenFlash('bg-red-500', 200);
+        createExplosion(50, 50, 'failure');
+      }
       
       onComplete({
         success: success && hasRequired,
@@ -177,17 +357,31 @@ const BureaucracyHellGame = () => {
               {fallingDocs.map(doc => (
                 <div
                   key={doc.id}
-                  className="absolute cursor-pointer transition-transform hover:scale-125"
+                  data-doc-id={doc.id}
+                  className="absolute cursor-pointer transition-all duration-200 hover:scale-125 hover:rotate-12 hover:z-10"
                   style={{
                     left: `${doc.x}%`,
                     top: `${doc.y}%`,
-                    transform: 'translate(-50%, -50%)'
+                    transform: 'translate(-50%, -50%) rotate(' + (Math.sin(Date.now() / 1000 + doc.id) * 5) + 'deg)',
+                    filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))'
                   }}
                   onClick={() => collectDocument(doc.id)}
+                  onMouseEnter={() => {
+                    // Add subtle particle trail on hover
+                    if (Math.random() > 0.7) {
+                      createParticleExplosion(doc.x, doc.y, 'hover', 3);
+                    }
+                  }}
                 >
                   <div className="text-center">
-                    <div className="text-5xl animate-bounce">{doc.emoji}</div>
-                    <div className="text-xs text-yellow-400 font-bold bg-black/50 rounded px-1">+{doc.points}</div>
+                    <div className="text-5xl animate-bounce" style={{ 
+                      animation: `bounce 1s infinite ${doc.id % 500}ms` 
+                    }}>
+                      {doc.emoji}
+                    </div>
+                    <div className="text-xs text-yellow-400 font-bold bg-black/70 rounded px-2 py-1 border border-yellow-600/50">
+                      +{doc.points}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -856,19 +1050,164 @@ const BureaucracyHellGame = () => {
       moving: [
         "Ah, fresh meat for the bureaucracy grinder! Your optimism is adorable.",
         "Moving to Germany? The paperwork alone weighs more than your furniture.",
-        "Welcome to the land where you need permission to get permission to apply for permission."
+        "Welcome to the land where you need permission to get permission to apply for permission.",
+        "Relocation papers require 47 stamps. We currently have 46 different stamp colors.",
+        "Fun fact: Your future address needs to be verified by your future neighbor's dog.",
+        "Plot twist: The building you're moving to hasn't been built yet, but you still need the forms.",
+        "Good news: Only 73 documents required! Bad news: They expire every 2 weeks.",
+        "Pro tip: The Anmeldung office closes for lunch... and breakfast... and dinner.",
+        "Did you know German has 127 words for 'administrative delay'? You'll learn them all.",
+        "Your moving truck is ready. Your paperwork approval ETA: Next century."
       ],
       business: [
         "Starting a business in Germany? Your descendants might see it registered.",
         "The Finanzamt already knows you're here. They can smell entrepreneurial spirit.",
-        "Fun fact: The business registration form has more pages than your business plan."
+        "Fun fact: The business registration form has more pages than your business plan.",
+        "Small business = Big forms. Medium business = Enormous forms. Large business = Why are you here?",
+        "Your business idea died of old age while waiting for the permit to be born.",
+        "German business law: If it's not explicitly permitted, it's definitely forbidden.",
+        "Trade license requires proof that your great-grandmother wasn't a witch.",
+        "Congratulations! Your business is approved for 1823. Current year: 2025.",
+        "Your business plan looks great! Too bad you need Plan B through Plan Z as backup.",
+        "Breaking: Local entrepreneur finally gets approval. Retires immediately from exhaustion."
       ],
       marriage: [
         "Getting married? The paperwork lasts longer than most marriages.",
         "Love is patient, love is kind, love requires 37 certified documents.",
-        "Romance level: Spending date nights at the Standesamt."
+        "Romance level: Spending date nights at the Standesamt.",
+        "Wedding vows: 'Till death or form rejection do us part.'",
+        "Marriage certificate requires birth certificate, which requires existence certificate.",
+        "Your engagement ring costs less than the mandatory notary fees.",
+        "Love knows no boundaries. Except geographical ones. Those require Forms A-Z.",
+        "Wedding planning: 10% venue, 20% dress, 70% bureaucratic nightmare.",
+        "Fun fact: German law requires proof your spouse actually exists.",
+        "Prenup includes agreement to share administrative burden 50/50."
+      ],
+      dog: [
+        "Registering a dog? Hope your pet speaks German and has patience.",
+        "Dog registration: Because even Fido needs government approval to exist.",
+        "Your dog needs a CV, three references, and proof of good character.",
+        "Pet tax calculation requires advanced mathematics and a philosophy degree.",
+        "Fun fact: Your dog's paperwork is more complex than your own residency permit.",
+        "Bark tax, wag tax, tail tax – each movement requires separate documentation.",
+        "Your dog needs permission to be cute. Form approval time: 6-8 weeks.",
+        "Plot twist: Your dog becomes a German citizen before you do.",
+        "Dog registration office only accepts applications on the third Tuesday of months ending in 'r'.",
+        "Your pet's German fluency test results: Better than yours."
       ]
-    }
+    },
+    experience: {
+      newbie: [
+        "Sweet summer child, your innocence is about to be bureaucratically destroyed.",
+        "First time? How delightfully naive. The system will cure that quickly.",
+        "Newbie detected. Initiating maximum chaos protocol.",
+        "Virgin bureaucracy experience? The system loves fresh souls.",
+        "Your optimism levels are dangerously high. We'll fix that.",
+        "First-timer alert! Sound the alarms! Deploy the confusing forms!",
+        "Beginner's luck doesn't apply here. Only beginner's despair.",
+        "New to Germany? Here's your complimentary lifetime supply of frustration.",
+        "Pro tip: Crying is allowed but requires Form TR-47 (Emotional Release Permit).",
+        "Welcome to the machine. Please insert your sanity and press any button."
+      ],
+      some: [
+        "Some experience? That just means you know enough to be truly terrified.",
+        "Ah, a returning customer! The system missed making you suffer.",
+        "Previous experience detected. Deploying advanced confusion tactics.",
+        "Back for more? Stockholm syndrome is surprisingly common here.",
+        "You've survived before. This time we're going full nightmare mode.",
+        "Experienced victim... I mean, citizen! Welcome back to hell.",
+        "Some battle scars, I see. Time to add a few more!",
+        "Previous encounters noted. Increasing difficulty to 'Kafkaesque'.",
+        "Oh good, you know the basics. Time to throw them out the window.",
+        "Veteran status: Recognized. Mercy level: Still zero."
+      ],
+      veteran: [
+        "A true veteran! You probably remember when we only needed 15 forms.",
+        "Seasoned warrior! Your eye twitch tells the story of a thousand queues.",
+        "Bureaucracy veteran detected. Respect... and our deepest condolences.",
+        "You've seen things. Terrible, administrative things.",
+        "Elder status confirmed. Please share your wisdom with the fresh meat.",
+        "A survivor of the great form shortage of 2019. Legendary.",
+        "Veteran benefits include: Nothing. The struggle continues.",
+        "Your service record: 847 forms filed, 1,243 rejections survived.",
+        "Master class bureaucracy navigator. Unfortunately, the rules changed yesterday.",
+        "You've reached final boss level. Plot twist: There's no final boss, just more forms."
+      ]
+    },
+    paperwork: {
+      confidence_high: [
+        "Such confidence! The system will enjoy breaking that spirit.",
+        "100% confident? That's mathematically impossible in Germany.",
+        "Your confidence is noted and will be used against you in court.",
+        "High confidence detected. Deploying special punishment protocols.",
+        "Overconfidence is a slow and insidious killer... of applications.",
+        "Famous last words: 'How hard can German paperwork be?'",
+        "Confidence level: Dangerous. System response: Maximum chaos.",
+        "Your arrogance will make excellent seasoning for your tears.",
+        "High confidence? We'll have you questioning your own name by lunch.",
+        "Bold assumption that logic applies here. How refreshing!"
+      ],
+      confidence_medium: [
+        "Moderate confidence? A wise approach to certain doom.",
+        "Medium confidence shows experience with German administrative reality.",
+        "Cautious optimism is the closest thing to wisdom you'll find here.",
+        "Realistic expectations? In Germany? How wonderfully unusual!",
+        "Medium confidence: The goldilocks zone of bureaucratic preparation.",
+        "Measured approach detected. Still won't save you, but points for trying.",
+        "Moderate expectations will be thoroughly exceeded... in the wrong direction.",
+        "Balanced perspective noted. Balance will be promptly destroyed.",
+        "Medium confidence suggests previous bureaucratic trauma. Good.",
+        "Reasonable expectations about unreasonable systems. Paradoxically logical."
+      ],
+      confidence_low: [
+        "Smart move! Low expectations are the only rational response.",
+        "Wise to fear the system. It feeds on confidence and grows stronger.",
+        "Your despair is premature but appropriately calibrated.",
+        "Low confidence shows proper respect for the administrative overlords.",
+        "Excellent! Pre-emptive hopelessness saves time later.",
+        "Your pessimism is well-founded and professionally appreciated.",
+        "Low expectations: The German way! You're already integrating!",
+        "Fear is the beginning of wisdom in bureaucratic contexts.",
+        "Your lack of confidence gives me confidence... in your suffering.",
+        "Proper German attitude achieved: Expect nothing, receive less."
+      ]
+    },
+    general: [
+      "The bureaucracy acknowledges your existence with mild disapproval.",
+      "Your request has been forwarded to the Department of Forwarding Requests.",
+      "Error 404: Efficiency not found.",
+      "Please take a number. Current number serving: 7. Your number: 847,293.",
+      "Your patience is appreciated and will be thoroughly tested.",
+      "Thank you for choosing German bureaucracy! No refunds, exchanges, or mercy.",
+      "Processing... Error... Processing... Coffee break... Processing...",
+      "Your suffering contributes to our quarterly efficiency metrics.",
+      "Complaint department is located in room 237B, which doesn't exist.",
+      "Your tears are noted and filed under 'Unprocessable Emotions'."
+    ],
+    achievements: [
+      "First rejection received! Welcome to the club!",
+      "Survived your first queue! Only 47,382 more to go!",
+      "Form completion speedrun: Personal best of 4.7 hours!",
+      "Mastered the art of bureaucratic patience!",
+      "Successfully confused the system by following instructions correctly!",
+      "Unlocked: Advanced Standing in Line Techniques!",
+      "Discovered a functioning office! (Achievement discontinued due to error)",
+      "Perfect attendance at impossible appointments!",
+      "Collected all 17 variants of Form 42-B!",
+      "Achievement: Made a Beamter smile! (Rare, possibly mythical)"
+    ],
+    office_hours: [
+      "Office hours: 10:03 to 10:07 AM, alternate Tuesdays, when Venus is in retrograde.",
+      "We're open! Except when we're not. Which is most of the time.",
+      "Hours of operation: Whenever you're not available.",
+      "Open 24/7*! (*Except between 7 AM and 7 AM)",
+      "Business hours: Yes, we have them. No, we won't tell you what they are.",
+      "Currently closed for: Lunch, training, holidays, Mondays, and existing.",
+      "Office hours subject to change without notice, reason, or logic.",
+      "Open by appointment only. Appointments available by appointment only.",
+      "We're here! But not for you. Never for you.",
+      "Hours of operation: It's complicated. Like everything else here."
+    ]
   };
 
   // Get random commentary without AI
@@ -925,18 +1264,50 @@ const BureaucracyHellGame = () => {
     return baseQuestions[currentStep] || baseQuestions[0];
   };
 
-  // Handle answer with smart commentary
+  // Handle answer with smart commentary and enhanced effects
   const handleAnswer = async (questionId, value, option) => {
     const newAnswers = { ...answers, [questionId]: value };
     setAnswers(newAnswers);
     
-    // Update meters
-    if (option.shock) setShockMeter(prev => Math.min(prev + option.shock, 100));
-    if (option.frustration) setFrustrationMeter(prev => Math.min(prev + option.frustration, 100));
-    if (option.kafka) setKafkaScore(prev => Math.min(prev + option.kafka, 100));
+    // Visual feedback for selection
+    createParticleExplosion(50, 50, 'success', 12);
+    createActionBar(`Processing: ${option.label}`, 2000);
+    
+    // Update meters with visual feedback
+    if (option.shock) {
+      const oldShock = shockMeter;
+      const newShock = Math.min(oldShock + option.shock, 100);
+      setShockMeter(newShock);
+      if (newShock - oldShock >= 20) {
+        triggerScreenFlash('bg-red-500', 300);
+        showAchievement('System Shock!', `+${option.shock} shock damage`, '⚡');
+      }
+    }
+    if (option.frustration) {
+      const oldFrustration = frustrationMeter;
+      const newFrustration = Math.min(oldFrustration + option.frustration, 100);
+      setFrustrationMeter(newFrustration);
+      if (newFrustration - oldFrustration >= 15) {
+        triggerScreenShake(400);
+        showAchievement('Rage Building!', `+${option.frustration} frustration`, '🤬');
+      }
+    }
+    if (option.kafka) {
+      const oldKafka = kafkaScore;
+      const newKafka = Math.min(oldKafka + option.kafka, 100);
+      setKafkaScore(newKafka);
+      if (newKafka >= 80 && oldKafka < 80) {
+        showAchievement('Kafkaesque!', 'Reality is now questionable', '🧘');
+      }
+    }
+    
+    // Enhanced transition effects
+    setIsTransitioning(true);
+    addFloatingDocument('choice', option.desc);
     
     // Generate commentary from pre-written pools
-    const commentary = getRandomCommentary('reason', value) || 
+    const commentary = getRandomCommentary(questionId, value) || 
+                      getRandomCommentary('general') ||
                       `You chose ${option.label}. The bureaucracy notes your decision with indifference.`;
     
     setCurrentCommentary(commentary);
@@ -950,14 +1321,20 @@ const BureaucracyHellGame = () => {
     if (shouldTriggerMiniGame) {
       setTimeout(() => {
         setShowCommentary(false);
+        setIsTransitioning(false);
         const gameKeys = Object.keys(miniGames);
         const selectedGame = gameKeys[currentStep % gameKeys.length];
         setCurrentMiniGame(miniGames[selectedGame]);
         setMiniGameActive(true);
+        
+        // Mini-game intro effect
+        createExplosion(50, 30, 'impact');
+        showAchievement('Mini-Game!', miniGames[selectedGame].title, '🎮');
       }, displayTime);
     } else {
       setTimeout(() => {
         setShowCommentary(false);
+        setIsTransitioning(false);
         if (currentStep < 2) {
           setCurrentStep(currentStep + 1);
         } else {
@@ -1114,36 +1491,104 @@ const BureaucracyHellGame = () => {
   const progress = ((currentStep + 1) / baseQuestions.length) * 100;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-red-950 to-black p-4">
-      <div className="max-w-2xl mx-auto">
+    <div className={`min-h-screen bg-gradient-to-br from-gray-900 via-red-950 to-black p-4 transition-transform duration-150 ${screenShake ? 'animate-shake' : ''}`}>
+      <div className="max-w-2xl mx-auto relative">{/* Enhanced Visual Effects Background */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {/* Floating background particles */}
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-2 h-2 bg-yellow-600/20 rounded-full"
+              style={{
+                left: `${10 + (i * 12)}%`,
+                top: `${20 + Math.sin(Date.now() / 2000 + i) * 10}%`,
+                animation: `float ${3 + i * 0.5}s ease-in-out infinite ${i * 0.2}s`
+              }}
+            />
+          ))}
+        </div>
         {/* Progress and meters */}
-        <div className="mb-6 space-y-2">
-          <div className="bg-gray-800 rounded-full h-6 overflow-hidden border border-gray-600 relative">
+        <div className="mb-6 space-y-2 relative z-10">
+          <div className="bg-gray-800 rounded-full h-6 overflow-hidden border border-gray-600 relative shadow-lg">
             <div 
-              className="bg-gradient-to-r from-red-600 to-yellow-500 h-full transition-all duration-500"
-              style={{ width: `${progress}%` }}
+              className="bg-gradient-to-r from-red-600 via-orange-500 to-yellow-500 h-full transition-all duration-700 ease-out"
+              style={{ 
+                width: `${progress}%`,
+                boxShadow: progress > 0 ? '0 0 10px rgba(251, 191, 36, 0.5)' : 'none'
+              }}
             />
             <div className="absolute inset-0 flex items-center justify-center">
-              <p className="text-white text-xs font-bold">Step {currentStep + 1} of {baseQuestions.length}</p>
+              <p className="text-white text-xs font-bold drop-shadow-lg">
+                Step {currentStep + 1} of {baseQuestions.length}
+              </p>
             </div>
+            {/* Progress sparkle effect */}
+            {progress > 0 && (
+              <div 
+                className="absolute top-1/2 h-1 w-1 bg-white rounded-full opacity-70"
+                style={{
+                  left: `${progress}%`,
+                  transform: 'translate(-50%, -50%)',
+                  animation: 'sparkle 1s ease-in-out infinite'
+                }}
+              />
+            )}
           </div>
           
           <div className="grid grid-cols-4 gap-2 text-xs">
-            <div className="bg-gray-800/60 rounded-lg px-3 py-1 border border-gray-700">
+            <div className="bg-gray-800/80 rounded-lg px-3 py-2 border border-gray-700 backdrop-blur-sm hover:bg-gray-700/80 transition-colors">
               <span className="text-red-400">Shock:</span>
-              <span className="text-yellow-400 font-bold ml-1">{shockMeter}%</span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-yellow-400 font-bold">{shockMeter}%</span>
+                <div className="flex-1 bg-gray-700 rounded-full h-1">
+                  <div 
+                    className="bg-gradient-to-r from-red-500 to-orange-500 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${shockMeter}%` }}
+                  />
+                </div>
+              </div>
             </div>
-            <div className="bg-gray-800/60 rounded-lg px-3 py-1 border border-gray-700">
+            <div className="bg-gray-800/80 rounded-lg px-3 py-2 border border-gray-700 backdrop-blur-sm hover:bg-gray-700/80 transition-colors">
               <span className="text-red-400">Rage:</span>
-              <span className="text-yellow-400 font-bold ml-1">{frustrationMeter}%</span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-yellow-400 font-bold">{frustrationMeter}%</span>
+                <div className="flex-1 bg-gray-700 rounded-full h-1">
+                  <div 
+                    className="bg-gradient-to-r from-orange-500 to-red-600 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${frustrationMeter}%` }}
+                  />
+                </div>
+              </div>
             </div>
-            <div className="bg-gray-800/60 rounded-lg px-3 py-1 border border-gray-700">
+            <div className="bg-gray-800/80 rounded-lg px-3 py-2 border border-gray-700 backdrop-blur-sm hover:bg-gray-700/80 transition-colors">
               <span className="text-red-400">Kafka:</span>
-              <span className="text-yellow-400 font-bold ml-1">{kafkaScore}%</span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-yellow-400 font-bold">{kafkaScore}%</span>
+                <div className="flex-1 bg-gray-700 rounded-full h-1">
+                  <div 
+                    className="bg-gradient-to-r from-purple-500 to-indigo-600 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${kafkaScore}%` }}
+                  />
+                </div>
+              </div>
             </div>
-            <div className="bg-gray-800/60 rounded-lg px-3 py-1 border border-gray-700">
+            <div className="bg-gray-800/80 rounded-lg px-3 py-2 border border-gray-700 backdrop-blur-sm hover:bg-gray-700/80 transition-colors">
               <span className="text-red-400">Will:</span>
-              <span className="text-yellow-400 font-bold ml-1">{survivalPoints}%</span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`font-bold ${survivalPoints > 50 ? 'text-green-400' : survivalPoints > 25 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {survivalPoints}%
+                </span>
+                <div className="flex-1 bg-gray-700 rounded-full h-1">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      survivalPoints > 50 ? 'bg-gradient-to-r from-green-500 to-emerald-600' :
+                      survivalPoints > 25 ? 'bg-gradient-to-r from-yellow-500 to-orange-500' :
+                      'bg-gradient-to-r from-red-500 to-red-700'
+                    }`}
+                    style={{ width: `${survivalPoints}%` }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1206,27 +1651,69 @@ const BureaucracyHellGame = () => {
                 </div>
 
                 <div className="grid gap-3 max-h-[400px] overflow-y-auto pr-2">
-                  {currentQuestion.options.map((option) => (
+                  {currentQuestion.options.map((option, index) => (
                     <button
                       key={option.value}
                       onClick={() => handleAnswer(currentQuestion.id, option.value, option)}
-                      className="bg-red-950/70 hover:bg-red-900/90 rounded-2xl p-5 text-left transition-all duration-300 border-2 border-red-800 hover:border-yellow-500 group hover:scale-[1.02] shadow-lg"
+                      onMouseEnter={() => {
+                        // Hover particle effect
+                        if (Math.random() > 0.6) {
+                          createParticleExplosion(
+                            Math.random() * window.innerWidth, 
+                            Math.random() * window.innerHeight, 
+                            'hover', 
+                            2
+                          );
+                        }
+                      }}
+                      className={`bg-red-950/70 hover:bg-red-900/90 rounded-2xl p-5 text-left transition-all duration-300 border-2 border-red-800 hover:border-yellow-500 group hover:scale-[1.02] shadow-lg hover:shadow-2xl hover:shadow-yellow-600/20 transform-gpu ${
+                        isTransitioning ? 'opacity-50 pointer-events-none' : ''
+                      }`}
+                      style={{
+                        animationDelay: `${index * 100}ms`,
+                        animation: !isTransitioning ? `slideInFromLeft 0.5s ease-out ${index * 100}ms both` : 'none'
+                      }}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                          <span className="text-4xl transform group-hover:scale-125 transition-all">
+                          <span className="text-4xl transform group-hover:scale-125 group-hover:rotate-12 transition-all duration-300 filter group-hover:drop-shadow-lg">
                             {option.emoji}
                           </span>
                           <div>
-                            <div className="font-bold text-lg text-yellow-200">
+                            <div className="font-bold text-lg text-yellow-200 group-hover:text-yellow-100 transition-colors">
                               {option.label}
                             </div>
-                            <div className="text-sm text-gray-400 mt-1">
+                            <div className="text-sm text-gray-400 mt-1 group-hover:text-gray-300 transition-colors">
                               {option.desc}
+                            </div>
+                            {/* Risk indicators */}
+                            <div className="flex gap-2 mt-2">
+                              {option.shock >= 20 && (
+                                <span className="text-xs bg-red-600/50 text-red-200 px-2 py-1 rounded-full">
+                                  ⚡ High Shock
+                                </span>
+                              )}
+                              {option.frustration >= 15 && (
+                                <span className="text-xs bg-orange-600/50 text-orange-200 px-2 py-1 rounded-full">
+                                  😤 Frustration
+                                </span>
+                              )}
+                              {option.kafka >= 10 && (
+                                <span className="text-xs bg-purple-600/50 text-purple-200 px-2 py-1 rounded-full">
+                                  🌀 Kafkaesque
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
-                        <ChevronRight className="w-6 h-6 text-gray-500 group-hover:text-yellow-400 transition-all" />
+                        <div className="flex flex-col items-center">
+                          <ChevronRight className="w-6 h-6 text-gray-500 group-hover:text-yellow-400 group-hover:translate-x-1 transition-all duration-300" />
+                          {(option.shock || option.frustration || option.kafka) && (
+                            <div className="text-xs text-gray-500 mt-1 group-hover:text-yellow-500">
+                              Click for chaos
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </button>
                   ))}
@@ -1237,6 +1724,125 @@ const BureaucracyHellGame = () => {
         )}
       </div>
 
+      {/* Enhanced Visual Effects Overlay */}
+      <div className="fixed inset-0 pointer-events-none z-40 overflow-hidden">
+        {/* Particle System */}
+        {particles.map(particle => (
+          <div
+            key={particle.id}
+            className="absolute rounded-full"
+            style={{
+              left: `${particle.x}px`,
+              top: `${particle.y}px`,
+              width: `${particle.size}px`,
+              height: `${particle.size}px`,
+              opacity: particle.life,
+              backgroundColor: 
+                particle.type === 'success' ? '#10b981' :
+                particle.type === 'document' ? '#f59e0b' :
+                particle.type === 'hover' ? '#8b5cf6' :
+                particle.type === 'failure' ? '#ef4444' :
+                '#6b7280',
+              transform: `scale(${particle.life})`,
+              filter: 'blur(0.5px)',
+              boxShadow: '0 0 4px currentColor'
+            }}
+          />
+        ))}
+
+        {/* Explosion Effects */}
+        {explosions.map(explosion => (
+          <div
+            key={explosion.id}
+            className="absolute flex items-center justify-center"
+            style={{
+              left: `${explosion.x}%`,
+              top: `${explosion.y}%`,
+              transform: 'translate(-50%, -50%)',
+              animation: `explosion-${explosion.type} ${explosion.duration}ms ease-out forwards`
+            }}
+          >
+            <div className="text-6xl">
+              {explosion.type === 'success' ? '🎉' : 
+               explosion.type === 'failure' ? '💥' : 
+               explosion.type === 'impact' ? '⚡' : '✨'}
+            </div>
+          </div>
+        ))}
+
+        {/* Floating Documents */}
+        {floatingDocuments.map(doc => (
+          <div
+            key={doc.id}
+            className="absolute text-2xl transition-all duration-1000"
+            style={{
+              left: `${doc.x}%`,
+              top: `${doc.y}%`,
+              transform: 'translate(-50%, -50%) rotate(' + (Math.sin(Date.now() / 1000) * 10) + 'deg)',
+              opacity: Math.max(0, (doc.life - Date.now()) / doc.life)
+            }}
+          >
+            📄
+          </div>
+        ))}
+
+        {/* Achievement Notifications */}
+        {achievements.map(achievement => (
+          <div
+            key={achievement.id}
+            className="absolute top-20 right-8 bg-gradient-to-r from-yellow-600 to-orange-600 text-white p-4 rounded-xl shadow-2xl border-2 border-yellow-400 max-w-xs"
+            style={{
+              opacity: achievement.opacity,
+              transform: `scale(${achievement.scale}) translateX(${achievement.opacity === 1 ? 0 : 100}px)`,
+              transition: 'all 0.3s ease-out'
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <div className="text-3xl">{achievement.icon}</div>
+              <div>
+                <div className="font-bold text-lg">{achievement.title}</div>
+                <div className="text-sm text-yellow-100">{achievement.description}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {/* Action Bars */}
+        {actionBars.map(bar => (
+          <div
+            key={bar.id}
+            className="absolute top-32 left-1/2 transform -translate-x-1/2 bg-black/80 text-white px-6 py-3 rounded-xl border border-yellow-600"
+          >
+            <div className="text-center text-sm font-bold mb-2">{bar.message}</div>
+            <div className="w-48 bg-gray-700 rounded-full h-2">
+              <div
+                className="bg-gradient-to-r from-yellow-400 to-green-400 h-full rounded-full transition-all duration-75"
+                style={{ width: `${bar.progress}%` }}
+              />
+            </div>
+          </div>
+        ))}
+
+        {/* Screen Flash Effect */}
+        {screenFlash && (
+          <div
+            className={`fixed inset-0 ${screenFlash} pointer-events-none z-50`}
+            style={{
+              opacity: 0.3,
+              animation: 'flash 200ms ease-out'
+            }}
+          />
+        )}
+      </div>
+
+      {/* Screen Shake Container */}
+      <div
+        className={`fixed inset-0 pointer-events-none z-30 ${screenShake ? 'animate-shake' : ''}`}
+        style={{
+          background: screenShake ? 'radial-gradient(circle, rgba(239,68,68,0.1) 0%, transparent 70%)' : 'none'
+        }}
+      />
+
       <style jsx>{`
         @keyframes bounce-subtle {
           0%, 100% { transform: scale(1); }
@@ -1245,6 +1851,94 @@ const BureaucracyHellGame = () => {
         
         .animate-bounce-subtle {
           animation: bounce-subtle 0.5s ease-out;
+        }
+
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          10%, 30%, 50%, 70%, 90% { transform: translateX(-3px); }
+          20%, 40%, 60%, 80% { transform: translateX(3px); }
+        }
+
+        .animate-shake {
+          animation: shake 0.5s ease-in-out;
+        }
+
+        @keyframes flash {
+          0% { opacity: 0; }
+          50% { opacity: 0.4; }
+          100% { opacity: 0; }
+        }
+
+        @keyframes explosion-success {
+          0% { 
+            transform: translate(-50%, -50%) scale(0) rotate(0deg);
+            opacity: 1;
+          }
+          50% { 
+            transform: translate(-50%, -50%) scale(1.5) rotate(180deg);
+            opacity: 0.8;
+          }
+          100% { 
+            transform: translate(-50%, -50%) scale(3) rotate(360deg);
+            opacity: 0;
+          }
+        }
+
+        @keyframes explosion-failure {
+          0% { 
+            transform: translate(-50%, -50%) scale(0);
+            opacity: 1;
+          }
+          30% { 
+            transform: translate(-50%, -50%) scale(1.2);
+            opacity: 1;
+          }
+          100% { 
+            transform: translate(-50%, -50%) scale(2.5);
+            opacity: 0;
+          }
+        }
+
+        @keyframes explosion-impact {
+          0% { 
+            transform: translate(-50%, -50%) scale(0) rotate(0deg);
+            opacity: 1;
+          }
+          100% { 
+            transform: translate(-50%, -50%) scale(2) rotate(180deg);
+            opacity: 0;
+          }
+        }
+
+        @keyframes slideInFromLeft {
+          0% { 
+            transform: translateX(-50px);
+            opacity: 0;
+          }
+          100% { 
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+
+        @keyframes float {
+          0%, 100% { 
+            transform: translateY(0px);
+          }
+          50% { 
+            transform: translateY(-10px);
+          }
+        }
+
+        @keyframes sparkle {
+          0%, 100% { 
+            opacity: 0.7;
+            transform: scale(1);
+          }
+          50% { 
+            opacity: 1;
+            transform: scale(1.5);
+          }
         }
       `}</style>
     </div>
