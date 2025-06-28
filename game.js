@@ -1493,14 +1493,40 @@ const BureaucracyHellGame = () => {
       }
     };
     
-    setResult({
+    // Generate dramatic final result with effects
+    const finalResult = {
       ...results[resultType],
-      stats: `Shock: ${stats.shock}% | Frustration: ${stats.frustration}% | Kafka: ${stats.kafka}%`
-    });
+      stats: `Shock: ${stats.shock}% | Frustration: ${stats.frustration}% | Kafka: ${stats.kafka}%`,
+      achievements: achievements.length
+    };
+    
+    // Trigger appropriate final effects
+    if (resultType === 'transcended') {
+      createParticleExplosion(400, 200, 'milestone', ['🧘', '📋', '⭐', '👑', '💫']);
+      triggerFlashEffect('gold', 1000);
+      triggerScreenShake('medium');
+    } else if (resultType === 'broken') {
+      createParticleExplosion(400, 200, 'failure');
+      triggerFlashEffect('red', 800);
+      triggerScreenShake('heavy');
+    } else if (resultType === 'defeated') {
+      createParticleExplosion(400, 200, 'failure', ['🏃', '💨', '😵', '💔']);
+      triggerFlashEffect('gray', 600);
+    } else {
+      createParticleExplosion(400, 200, 'success');
+      triggerFlashEffect('green', 600);
+    }
+    
+    setResult(finalResult);
   };
 
-  // Restart game
+  // Restart game with proper cleanup
   const restart = () => {
+    // Trigger restart effects
+    createParticleExplosion(400, 200, 'documents', ['🔄', '🎮', '🚀', '⭐']);
+    triggerFlashEffect('white', 400);
+    
+    // Reset all game state
     setCurrentStep(0);
     setAnswers({});
     setResult(null);
@@ -1509,42 +1535,121 @@ const BureaucracyHellGame = () => {
     setKafkaScore(0);
     setSurvivalPoints(100);
     setFormsRejected(0);
+    
+    // Reset enhanced states
+    setParticles([]);
+    setRippleEffects([]);
+    setShowAchievement(null);
+    setIsTransitioning(false);
+    setAnimatedMeters({
+      shock: 0,
+      frustration: 0,
+      kafka: 0,
+      survival: 100
+    });
+    
+    // Clear any active overlays
+    setShowCommentary(false);
+    setCurrentCommentary('');
+    setMiniGameActive(false);
+    setCurrentMiniGame(null);
+    
+    // Achievements persist across restarts (they're earned!)
+    // setAchievements([]);
   };
 
   // Get current question
   const currentQuestion = getCurrentQuestion();
 
-  // Results screen
+  // Results screen with enhanced effects
   if (result) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-red-950 to-black p-4">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-black/90 backdrop-blur-xl rounded-3xl p-8 text-white shadow-2xl border-4 border-red-600">
+      <div 
+        ref={gameContainerRef}
+        className={`min-h-screen bg-gradient-to-br from-gray-900 via-red-950 to-black p-4 relative overflow-hidden ${screenShake ? screenShake : ''}`}
+      >
+        {/* Result particles */}
+        {particles.map(particle => (
+          <div
+            key={particle.id}
+            className="absolute pointer-events-none z-50"
+            style={{
+              left: particle.x,
+              top: particle.y,
+              fontSize: `${particle.scale * 24}px`,
+              animation: `particle-explosion 2s ease-out forwards`,
+              transform: `rotate(${particle.rotation}deg)`
+            }}
+          >
+            {particle.emoji}
+          </div>
+        ))}
+
+        {/* Flash effect overlay */}
+        {flashEffect && (
+          <div
+            className="fixed inset-0 pointer-events-none z-50"
+            style={{
+              backgroundColor: flashEffect === 'gold' ? 'rgba(250, 204, 21, 0.3)' :
+                              flashEffect === 'green' ? 'rgba(34, 197, 94, 0.3)' :
+                              flashEffect === 'red' ? 'rgba(239, 68, 68, 0.3)' :
+                              'rgba(255, 255, 255, 0.2)',
+              animation: 'flash-fade 0.3s ease-out'
+            }}
+          />
+        )}
+
+        <div className="max-w-2xl mx-auto relative z-10">
+          <div className="bg-black/90 backdrop-blur-xl rounded-3xl p-8 text-white shadow-2xl border-4 border-red-600 hover-lift">
             <div className="text-center mb-8">
-              <div className="text-8xl mb-4 animate-pulse">{result.emoji}</div>
-              <h1 className="text-4xl font-black mb-4 text-red-500">{result.title}</h1>
-              <p className="text-2xl text-yellow-400 mb-2 font-mono break-all">{result.germanWord}</p>
+              <div className="text-8xl mb-4 animate-bounce-slow">{result.emoji}</div>
+              <h1 className="text-4xl font-black mb-4 text-red-500 animate-slide-up">{result.title}</h1>
+              <p className="text-2xl text-yellow-400 mb-2 font-mono break-all animate-type-writer">{result.germanWord}</p>
               <p className="text-xl text-gray-300 italic">{result.description}</p>
             </div>
             
-            <div className="bg-gradient-to-r from-red-950/80 to-black/80 rounded-2xl p-6 mb-6">
-              <h2 className="text-2xl font-black mb-3 text-yellow-300">VERDICT:</h2>
-              <p className="text-lg">{result.verdict}</p>
+            <div className="bg-gradient-to-r from-red-950/80 to-black/80 rounded-2xl p-6 mb-6 border border-red-600/30">
+              <h2 className="text-2xl font-black mb-3 text-yellow-300 flex items-center gap-2">
+                <span className="animate-pulse">⚖️</span> VERDICT:
+              </h2>
+              <p className="text-lg leading-relaxed">{result.verdict}</p>
             </div>
             
-            <div className="bg-black/60 rounded-2xl p-6 mb-6">
-              <h3 className="text-xl font-bold mb-2 text-yellow-300">ADVICE:</h3>
-              <p className="text-gray-200">{result.advice}</p>
+            <div className="bg-black/60 rounded-2xl p-6 mb-6 border border-gray-600/30">
+              <h3 className="text-xl font-bold mb-2 text-yellow-300 flex items-center gap-2">
+                <span className="animate-pulse">💡</span> ADVICE:
+              </h3>
+              <p className="text-gray-200 leading-relaxed">{result.advice}</p>
             </div>
-            
-            <div className="text-center text-sm text-gray-400 mb-6">{result.stats}</div>
+
+            {/* Enhanced stats display */}
+            <div className="bg-gray-800/50 rounded-2xl p-4 mb-6">
+              <h4 className="text-lg font-bold text-center text-yellow-300 mb-3">
+                📊 Final Bureaucratic Assessment
+              </h4>
+              <div className="text-center text-sm text-gray-300 mb-2">{result.stats}</div>
+              {result.achievements > 0 && (
+                <div className="text-center text-sm text-orange-400">
+                  🏆 Achievements Unlocked: {result.achievements}
+                </div>
+              )}
+            </div>
+
+            {/* Certificate display */}
+            <div className="bg-gradient-to-r from-amber-900/20 to-yellow-900/20 rounded-2xl p-4 mb-6 border border-yellow-600/30">
+              <div className="text-center">
+                <div className="text-2xl mb-2">📜</div>
+                <div className="text-yellow-300 font-bold text-lg mb-1">Official Document:</div>
+                <div className="text-gray-300 text-sm italic">{result.certificate}</div>
+              </div>
+            </div>
             
             <button
               onClick={restart}
-              className="w-full bg-gradient-to-r from-red-700 to-red-900 text-white py-4 px-6 rounded-2xl font-black text-xl hover:from-red-800 hover:to-black transition-all transform hover:scale-105"
+              className="w-full bg-gradient-to-r from-red-700 to-red-900 text-white py-4 px-6 rounded-2xl font-black text-xl hover:from-red-800 hover:to-black transition-all transform hover:scale-105 btn-enhanced"
             >
               <RotateCcw className="w-6 h-6 inline mr-2" />
-              TRY AGAIN
+              ENTER THE BUREAUCRACY AGAIN
             </button>
           </div>
         </div>
