@@ -41,8 +41,12 @@ const BureaucracyHellGame = () => {
 
   // Enhanced Visual Effects System
   const createParticleExplosion = useCallback((x, y, type = 'success', count = 10) => {
+    // Reduce particle count on mobile devices for better performance
+    const isMobile = window.innerWidth < 768;
+    const adjustedCount = isMobile ? Math.ceil(count / 2) : count;
+    
     const newParticles = [];
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < adjustedCount; i++) {
       newParticles.push({
         id: Date.now() + i,
         x: x + (Math.random() - 0.5) * 100,
@@ -1790,7 +1794,7 @@ const BureaucracyHellGame = () => {
             )}
           </div>
           
-          <div className="grid grid-cols-4 gap-2 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs progress-meters">
             <div className="bg-gray-800/80 rounded-lg px-3 py-2 border border-gray-700 backdrop-blur-sm hover:bg-gray-700/80 transition-colors">
               <span className="text-red-400">Shock:</span>
               <div className="flex items-center gap-2 mt-1">
@@ -2135,12 +2139,12 @@ const BureaucracyHellGame = () => {
       </div>
 
       {/* Enhanced Visual Effects Overlay */}
-      <div className="fixed inset-0 pointer-events-none z-40 overflow-hidden">
+      <div className="fixed inset-0 pointer-events-none z-40 overflow-hidden particle-overlay">
         {/* Particle System */}
         {particles.map(particle => (
           <div
             key={particle.id}
-            className="absolute rounded-full"
+            className="absolute rounded-full particle-system"
             style={{
               left: `${particle.x}px`,
               top: `${particle.y}px`,
@@ -2200,7 +2204,7 @@ const BureaucracyHellGame = () => {
         {achievements.map(achievement => (
           <div
             key={achievement.id}
-            className="absolute top-20 right-8 bg-gradient-to-r from-yellow-600 to-orange-600 text-white p-4 rounded-xl shadow-2xl border-2 border-yellow-400 max-w-xs"
+            className="absolute top-20 right-8 bg-gradient-to-r from-yellow-600 to-orange-600 text-white p-4 rounded-xl shadow-2xl border-2 border-yellow-400 max-w-xs achievement-notification"
             style={{
               opacity: achievement.opacity,
               transform: `scale(${achievement.scale}) translateX(${achievement.opacity === 1 ? 0 : 100}px)`,
@@ -2221,7 +2225,7 @@ const BureaucracyHellGame = () => {
         {actionBars.map(bar => (
           <div
             key={bar.id}
-            className="absolute top-32 left-1/2 transform -translate-x-1/2 bg-black/80 text-white px-6 py-3 rounded-xl border border-yellow-600"
+            className="absolute top-32 left-1/2 transform -translate-x-1/2 bg-black/80 text-white px-6 py-3 rounded-xl border border-yellow-600 action-bar"
           >
             <div className="text-center text-sm font-bold mb-2">{bar.message}</div>
             <div className="w-48 bg-gray-700 rounded-full h-2">
@@ -2349,6 +2353,72 @@ const BureaucracyHellGame = () => {
             opacity: 1;
             transform: scale(1.5);
           }
+        }
+
+        /* Responsive design improvements */
+        @media (max-width: 768px) {
+          .particle-overlay {
+            display: none; /* Disable particles on mobile for performance */
+          }
+          
+          .achievement-notification {
+            max-width: 280px;
+            right: 1rem;
+            top: 4rem;
+          }
+          
+          .action-bar {
+            max-width: 200px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .mini-game-overlay {
+            padding: 1rem;
+          }
+          
+          .option-button {
+            padding: 1rem;
+          }
+          
+          .progress-meters {
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+          }
+        }
+
+        /* High contrast mode support */
+        @media (prefers-contrast: high) {
+          .border-red-600 {
+            border-color: #ffffff !important;
+          }
+          
+          .text-yellow-400 {
+            color: #ffffff !important;
+          }
+          
+          .bg-gradient-to-r {
+            background: #ffffff !important;
+          }
+        }
+
+        /* Reduced motion support */
+        @media (prefers-reduced-motion: reduce) {
+          * {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+          }
+          
+          .particle-system {
+            display: none !important;
+          }
+        }
+
+        /* Focus visible for keyboard navigation */
+        button:focus-visible {
+          outline: 2px solid #fbbf24;
+          outline-offset: 2px;
         }
       `}</style>
     </div>
