@@ -1,0 +1,43 @@
+# Cloudflare AI on GitHub: reviews every pull request and triages every new issue. Model: Workers AI gpt-oss-120b.
+# Secrets: CF_AI_TOKEN (Cloudflare token with Workers AI only), CF_ACCOUNT_ID. Installed by SharedKB\tools\github-ai-rollout.ps1.
+name: github-ai
+on:
+  pull_request: { types: [opened, synchronize, reopened, ready_for_review] }
+  issues: { types: [opened] }
+permissions: { contents: read, pull-requests: write, issues: write }
+concurrency: { group: "github-ai-${{ github.event.pull_request.number || github.event.issue.number }}", cancel-in-progress: true }
+jobs:
+  ai:
+    if: github.actor != 'dependabot[bot]' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/github-script@v7
+        env: { CF_AI_TOKEN: "${{ secrets.CF_AI_TOKEN }}", CF_ACCOUNT_ID: "${{ secrets.CF_ACCOUNT_ID }}" }
+        with:
+          script: |
+            const ask = async (system, user) => {
+              const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${process.env.CF_ACCOUNT_ID}/ai/run/@cf/openai/gpt-oss-120b`, {
+                method: 'POST', headers: { Authorization: `Bearer ${process.env.CF_AI_TOKEN}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }) });
+              const j = await r.json(); if (!j.success) throw new Error(`Workers AI: ${JSON.stringify(j.errors)}`);
+              const o = j.result ?? {};
+              return (o.response ?? o.choices?.[0]?.message?.content ?? (o.output ?? []).flatMap((x) => x.content ?? []).map((c) => c.text ?? '').join('')).trim();
+            };
+            const { owner, repo } = context.repo;
+            if (context.eventName === 'pull_request') {
+              const pr = context.payload.pull_request; if (pr.draft) return;
+              const { data: diff } = await github.rest.pulls.get({ owner, repo, pull_number: pr.number, mediaType: { format: 'diff' } });
+              const review = await ask('You are a senior reviewer. Review this pull request diff for bugs, security problems (secrets, injection, unsafe defaults), missing error handling and missing tests. Be specific: file and line, what is wrong, the fix. If it looks fine, say so in one line. Max 25 bullet points. Never repeat a secret value.',
+                `Title: ${pr.title}\n\n${pr.body ?? ''}\n\nDiff:\n${String(diff).slice(0, 60000)}`);
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: `**Cloudflare AI review** (gpt-oss-120b)\n\n${review}` });
+            } else if (context.eventName === 'issues') {
+              const is = context.payload.issue;
+              const { data: labels } = await github.rest.issues.listLabelsForRepo({ owner, repo, per_page: 100 });
+              const raw = await ask('Triage a GitHub issue. Reply with JSON only: {"labels": [names chosen ONLY from the given list], "summary": "one line", "next_step": "the first concrete step", "copilot_ready": true|false}. copilot_ready is true when the issue is specific enough for an AI coding agent to implement alone.',
+                `Available labels: ${labels.map((l) => l.name).join(', ')}\n\nTitle: ${is.title}\n\n${is.body ?? ''}`);
+              const t = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] ?? '{}');
+              const ok = (t.labels ?? []).filter((n) => labels.some((l) => l.name === n));
+              if (ok.length) await github.rest.issues.addLabels({ owner, repo, issue_number: is.number, labels: ok });
+              await github.rest.issues.createComment({ owner, repo, issue_number: is.number, body: `**Cloudflare AI triage**\n\n${t.summary ?? ''}\n\nNext step: ${t.next_step ?? ''}\n\n${t.copilot_ready ? 'Ready for Copilot: assign this issue to Copilot to have it open a pull request.' : 'Needs more detail before Copilot can take it.'}` });
+            }
